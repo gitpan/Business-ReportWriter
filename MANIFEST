@@ -1,0 +1,15 @@
+lib/Business/ReportWriter.pm
+lib/Business/ReportWriter/OOCalc.pm
+lib/Business/ReportWriter/Pdf.pm
+t/OOCalc.t
+t/Pdf.t
+ex/rr.pl
+ex/rr.sh
+ex/inventory.xml
+ex/products.sql
+ARTISTIC
+GPL
+Build.PL
+MANIFEST
+META.yml
+README
