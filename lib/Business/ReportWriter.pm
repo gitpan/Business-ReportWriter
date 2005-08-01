@@ -13,15 +13,15 @@ sub processReport {
   my ($self, $outfile, $report, $head, $list) = @_;
   my %report = %$report;
   my @list = @$list;
-  $self -> reportInit( $report{report} );
-  $self -> pageHeader( $report{page}{header} );
-  $self -> body( $report{body} );
-  $self -> graphics( $report{graphics} );
-  $self -> logos( $report{page}{logo} );
-  $self -> breaks( $report{breaks} );
-  $self -> fields( $report{fields} );
-  $self -> printList(\@list, \%$head );
-  $self -> printDoc($outfile);
+  $self->reportInit( $report{report} );
+  $self->pageHeader( $report{page}{header} );
+  $self->body( $report{body} );
+  $self->graphics( $report{graphics} );
+  $self->logos( $report{page}{logo} );
+  $self->breaks( $report{breaks} );
+  $self->fields( $report{fields} );
+  $self->printList(\@list, \%$head );
+  $self->printDoc($outfile);
 }
 
 sub reportInit {
@@ -43,6 +43,16 @@ sub body {
 sub graphics {
   my ($self, $parms) = @_;
   $self->{report}{graphics} = $parms;
+}
+
+sub fieldHeaders {
+  my ($self, $fh) = @_;
+
+  if ($fh->{show} ne 'off') {
+    for (@{ $self->{report}{fields} }) {
+      $self->outField($_->{text}, $_);
+    }
+  }
 }
 
 sub logos {
@@ -74,27 +84,93 @@ sub initField {
 sub outField {
 }
 
+sub break_fields {
+  my ($self, $break_name, $tot) = @_;
+  my $name = $tot->{name};
+  my $rec = $self->{totals}{$break_name};
+
+  $self->process_field($tot, $rec);
+  $self->{totals}{$break_name}{$name} = 0;
+}
+
+sub process_break {
+  my ($self, $break_name) = @_;
+  my $p = $self->{pdf};
+
+  my $break = $self->{report}{breaks}{$break_name};
+  $self -> initLine($break);
+
+  if (defined($break->{total})) {
+    foreach my $tot (@{ $break->{total} }) {
+      $self->break_fields($break_name, $tot);
+    }
+  }
+}
+
+sub printBreakheader {
+  my ($self, $rec, $break_name) = @_;
+  my $p = $self->{pdf};
+  my $break = $self->{report}{breaks}{$break_name};
+
+  $self -> initLine($rec);
+  for my $bh (@{ $break->{header}{text} }) {
+    $self->process_field($bh, $rec);
+  }
+
+  $self -> initLine($rec);
+  $self->fieldHeaders($break->{header}{FieldHeaders});
+}
+
+sub printBreak {
+  my $self = shift;
+
+  for my $break_name (@{ $self->{report}{breaks}{order} }) {
+    my $self_break = $self->{breaks}{$break_name} || '';
+    if ($self_break eq '_break') {
+      $self->process_break($break_name);
+    }
+  }
+}
+
+sub fieldHeaders {
+  my ($self, $fh) = @_;
+
+  if ($fh->{show} ne 'off') {
+    for (@{ $self->{report}{fields} }) {
+      $self->outField($_->{text}, $_);
+    }
+  }
+}
+
+sub process_field {
+  my ($self, $fld, $rec) = @_;
+
+  my $text;
+  return if (defined($fld->{depends}) && 
+    !eval($self -> make_text($rec, $fld->{depends})));
+  $text = defined($fld->{function}) ?
+    $self->make_func($rec, $fld->{function}) :
+    $self->make_text($rec, $fld->{text});
+  $self->outField($text, $fld) if $text;
+}
+
 sub printLine {
   my ($self, $rec) = @_;
   $self -> initLine($rec);
   for (@{ $self->{report}{fields} }) {
     if (!defined($_->{depends}) || defined($_->{depends})
-    && eval($self -> makeHeadertext($rec, $_->{depends}))) {
-      my $res;
+    && eval($self->make_text($rec, $_->{depends}))) {
+      my $text;
       $self -> initField($_);
       if (defined($_->{function})) {
-        my $function = '$res = ' .
-          $self -> makeHeadertext($rec, $_->{function});
-        setlocale(LC_NUMERIC, $self->{report}{locale});
-        eval($function);
-        setlocale( LC_NUMERIC, "C" );
+        $text = $self->make_func($rec, $_->{function});
       } elsif (defined($_->{name})) {
-        $res = $rec->{$_->{name}};
+        $text = $rec->{$_->{name}};
         setlocale(LC_NUMERIC, $self->{report}{locale});
-        $res = sprintf($_->{format}, $res) if $_->{format};
+        $text = sprintf($_->{format}, $text) if $_->{format};
         setlocale( LC_NUMERIC, "C" );
       }
-      $self->outField($res, $_);
+      $self->outField($text, $_);
     }
   }
 }
@@ -105,7 +181,8 @@ sub sumTotals {
   for my $break (@{ $self->{report}{breaks}{order} }) {
     if (defined($self->{report}{breaks}{$break}{total})) {
       foreach my $tot (@{ $self->{report}{breaks}{$break}{total} }) {
-        $self->{totals}{$break}{$tot} += $rec->{$tot};
+        my $name = $tot->{name};
+        $self->{totals}{$break}{$name} += $rec->{$name};
       }
     }
   }
@@ -130,8 +207,8 @@ sub saveBreaks {
   for my $break (reverse @{ $self->{report}{breaks}{order}}) {
     my $self_break = $self->{breaks}{$break} || '';
     my $rec_break = $rec->{$break} || '';
-    $self -> printBreakheader($rec, $break) 
-      if $first and $break ne '_total' and $break ne '_page'
+    $self -> printBreakheader($rec, $break)
+      if ($first and $break ne '_total' and $break ne '_page')
       || $self_break ne $rec_break;
     $self->{breaks}{$break} = $rec->{$break};
   }
@@ -143,16 +220,37 @@ sub processTotals {
   my $first = (!defined($self->{started}));
   $self->{started} = 1;
   my $last = (ref $rec ne 'HASH');
-  $self -> printTotals($rec) if !$first;
-  $self -> saveBreaks($rec, $first) if !$last;
-  $self -> sumTotals($rec) if !$last;
+  $self->printTotals($rec) if !$first;
+  $self->saveBreaks($rec, $first) if !$last;
+  $self->sumTotals($rec) if !$last;
+}
+
+sub initList {
+}
+
+sub checkPage {
+}
+
+sub printList {
+  my ($self, $list, $page) = @_;
+  my @list = @$list;
+  $self->{pageData} = $page;
+
+  $self->initList;
+
+  foreach my $rec (@list) {
+    $self->checkPage;
+    $self->processTotals($rec);
+    $self->printLine($rec);
+  }
+  $self->endPrint();
 }
 
 sub printTotals {
   my ($self, $rec) = @_;
   my $last = (ref $rec ne 'HASH');
-  $self -> checkforBreak($rec, $last);
-  $self -> printBreak();
+  $self->checkforBreak($rec, $last);
+  $self->printBreak();
 }
 
 sub endPrint {
@@ -160,13 +258,28 @@ sub endPrint {
   $self -> processTotals();
 }
 # Support
-sub makeHeadertext {
-  my $self = shift;
-  my ($rec, $text) = @_;
+
+sub make_text {
+  my ($self, $rec, $text) = @_;
+
   my @fields = ($text =~ /\$(\w*)/g);
   for my $field (@fields) {
     $text =~ s/\$$field/$rec->{$field}/eg;
   }
+  return $text;
+}
+
+sub make_func {
+  my ($self, $rec, $func) = @_;
+
+  my @fields = ($func =~ /\$(\w*)/g);
+  for my $field (@fields) {
+    $func =~ s/\$$field/\$rec->{$field}/g;
+  }
+  my $text;
+  setlocale(LC_NUMERIC, $self->{report}{locale});
+  eval('$text = ' . $func);
+  setlocale( LC_NUMERIC, "C" );
   return $text;
 }
 

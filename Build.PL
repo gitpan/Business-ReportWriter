@@ -3,11 +3,11 @@ my $build = Module::Build->new (
   module_name => 'Business::ReportWriter',
   dist_author => 'Kaare Rasmussen <kar at kakidata.dk>',
   dist_abstract => 'A Business Oriented ReportWriter. Currently supports PDF and OpenOffice Calc.',
-  dist_version => '0.03',
+  dist_version => '0.05',
   license => 'perl',
   requires => {
     'perl'                         => '5.8.3',
-    'PDF::Report'                  => '1.20',
+    'PDF::API2'                    => '0.40',
     'OpenOffice::OOBuilder'        => '0'
   },
 );

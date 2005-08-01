@@ -1,5 +1,5 @@
-Business::ReportWriter 0.03
-=================================
+Business::ReportWriter 0.05
+===========================
 
 SYNOPSIS
 The idea is to produce reports based on data that are extracted from a
@@ -19,14 +19,6 @@ In the XML file there are sections for
 - Breaks (this is where Report Writer will make a nice total for you)
 - Fields
 
-CHANGES
-From 0.02 to 0.03
-- Modularised it
-- Added Pdf and OOCalc. Lost PostScript in the process.
-- Added a lot of functionality
-From 0.01 to 0.02
-- Fixed a lot of bugs with font handling and more
-- Introduced a page total
 
 INSTALLATION
 To install this module type the following:
