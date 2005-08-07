@@ -1,6 +1,9 @@
 package Business::ReportWriter;
 
 use POSIX qw(setlocale LC_NUMERIC);
+##
+use Data::Dumper;
+##
 
 sub new {
   my ($class, %parms) = @_;
@@ -13,6 +16,8 @@ sub processReport {
   my ($self, $outfile, $report, $head, $list) = @_;
   my %report = %$report;
   my @list = @$list;
+  push @list, {} if $#list < 1;
+
   $self->reportInit( $report{report} );
   $self->pageHeader( $report{page}{header} );
   $self->body( $report{body} );
@@ -21,13 +26,12 @@ sub processReport {
   $self->breaks( $report{breaks} );
   $self->fields( $report{fields} );
   $self->printList(\@list, \%$head );
-  $self->printDoc($outfile);
+  return $outfile ? $self->printDoc($outfile) : $self->get_doc;
 }
 
 sub reportInit {
   my ($self, $parms) = @_;
-  $self->{report}{papersize} = $parms->{papersize};
-  $self->{report}{locale} = $parms->{locale};
+  $self->{report} = $parms;
 }
 
 sub pageHeader {
@@ -50,7 +54,7 @@ sub fieldHeaders {
 
   if ($fh->{show} ne 'off') {
     for (@{ $self->{report}{fields} }) {
-      $self->outField($_->{text}, $_);
+      $self->outField($_->{text}, $_, $fh);
     }
   }
 }
@@ -112,12 +116,12 @@ sub printBreakheader {
   my $p = $self->{pdf};
   my $break = $self->{report}{breaks}{$break_name};
 
-  $self -> initLine($rec);
+  $self->initLine($rec, $break->{header});
   for my $bh (@{ $break->{header}{text} }) {
     $self->process_field($bh, $rec);
   }
 
-  $self -> initLine($rec);
+  $self -> initLine($rec, $break->{header}{FieldHeaders});
   $self->fieldHeaders($break->{header}{FieldHeaders});
 }
 
@@ -132,46 +136,55 @@ sub printBreak {
   }
 }
 
-sub fieldHeaders {
-  my ($self, $fh) = @_;
-
-  if ($fh->{show} ne 'off') {
-    for (@{ $self->{report}{fields} }) {
-      $self->outField($_->{text}, $_);
-    }
-  }
-}
-
 sub process_field {
   my ($self, $fld, $rec) = @_;
 
-  my $text;
   return if (defined($fld->{depends}) && 
     !eval($self -> make_text($rec, $fld->{depends})));
-  $text = defined($fld->{function}) ?
+  my $text = defined($fld->{function}) ?
     $self->make_func($rec, $fld->{function}) :
     $self->make_text($rec, $fld->{text});
   $self->outField($text, $fld) if $text;
 }
 
+
+sub make_fieldtext {
+  my ($self, $rec, $text) = @_;
+  my @fields = ($text =~ /(\w*)/g);
+  for my $field (@fields) {
+    $text =~ s/$field/$rec->{$field}/eg;
+  }
+  return $text;
+}
+
+sub process_linefield {
+  my ($self, $fld, $rec) = @_;
+
+  return if (defined($fld->{depends}) && 
+    !eval($self -> make_text($rec, $fld->{depends})));
+  $self -> initField($fld);
+  my $text = defined($fld->{function}) ?
+    $self->make_func($rec, $fld->{function}) :
+    $self->make_fieldtext($rec, $fld->{name});
+  $self->outField($text, $fld) if $text;
+}
+
+sub textarray {
+  my ($self, $fld, $rec) = @_;
+
+  for (@{ $rec->{$fld->{name}} }) {
+    $self -> initField($fld);
+    $self->outField($_, $fld) if $_;
+  }
+}
+
 sub printLine {
   my ($self, $rec) = @_;
+
   $self -> initLine($rec);
   for (@{ $self->{report}{fields} }) {
-    if (!defined($_->{depends}) || defined($_->{depends})
-    && eval($self->make_text($rec, $_->{depends}))) {
-      my $text;
-      $self -> initField($_);
-      if (defined($_->{function})) {
-        $text = $self->make_func($rec, $_->{function});
-      } elsif (defined($_->{name})) {
-        $text = $rec->{$_->{name}};
-        setlocale(LC_NUMERIC, $self->{report}{locale});
-        $text = sprintf($_->{format}, $text) if $_->{format};
-        setlocale( LC_NUMERIC, "C" );
-      }
-      $self->outField($text, $_);
-    }
+    $self->textarray($_, $rec), next if lc($_->{fieldtype}) eq 'textarray';
+    $self->process_linefield($_, $rec);
   }
 }
 

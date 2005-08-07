@@ -174,6 +174,17 @@ sub getStringWidth {
   return $txt->advancewidth($String);
 }
 
+sub drawLine {
+  my ( $self, $x1, $y1, $x2, $y2 ) = @_;
+
+  my $gfx = $self->{page}->gfx;
+  $gfx->move($x1, $y1);
+  $gfx->linewidth($self->{linewidth});
+  $gfx->linewidth(.1);
+  $gfx->line($x2, $y2);
+  $gfx->stroke;
+}
+
 sub drawRect {
   my ( $self, $x1, $y1, $x2, $y2 ) = @_;
 
@@ -181,6 +192,17 @@ sub drawRect {
   $gfx->linewidth($self->{linewidth});
   $gfx->rectxy($x1, $y1, $x2, $y2);
   $gfx->stroke;
+}
+
+sub shadeRect {
+  my ( $self, $x1, $y1, $x2, $y2, $color ) = @_;
+
+  my $gfx = $self->{page}->gfx;
+
+  $gfx->fillcolor($color);
+  $gfx->rectxy($x1, $y1, $x2, $y2);
+  $gfx->fill;
+  $gfx->fillcolor('black');
 }
 
 sub setGfxLineWidth {
@@ -196,7 +218,7 @@ sub addImgScaled {
 }
 
 sub addImg {
-  my ( $self, $file, $x, $y ) = @_;
+  my ( $self, $file, $x, $y, $scale ) = @_;
 
   my %type = (jpeg => "jpeg",
               jpg  => "jpeg",
@@ -214,7 +236,12 @@ sub addImg {
   my $img = $self->{pdf}->$sub($file);
   my $gfx = $self->{page}->gfx;
 
-  $gfx->image($img, $x, $y);
+  $gfx->image($img, $x, $y, $scale);
+}
+
+sub setTextcolor {
+  my ( $self, $color ) = @_;
+  $self->{textcolor} = $color;
 }
 
 sub addParagraph {
@@ -223,6 +250,8 @@ sub addParagraph {
   my $txt = $self->{page}->text;
   $txt->font($self->{font}, $self->{size});
 
+  my $textcolor = $self->{textcolor} || 'black';
+  $txt->fillcolor($textcolor);
   $txt->lead($lead); # Line spacing
   $txt->translate($hPos,$vPos);
   $txt->paragraph($text, $width, $height, -align=>'justified');
@@ -284,7 +313,9 @@ sub fields {
 # Routines for report writing
 sub calcYoffset {
   my ($self, $fontsize) = @_;
-  return $self->{ypos} -= $fontsize + 2;
+  $self->{ypos} -= $fontsize + 2;
+  $self->checkPage;
+  return $self->{ypos};
 }
 
 sub page_footer {
@@ -381,9 +412,58 @@ sub newPage {
   $self -> drawLogos();
 }
 
+sub text_color {
+  my ($self, $color) = @_;
+  my $p = $self->{pdf};
+
+  $p->setTextcolor($color);
+}
+
+sub set_linecolor {
+  my ($self, $fld_fgcolor) = @_;
+
+  my $fgcolor = $fld_fgcolor ? $fld_fgcolor :
+    $self->{report}{textcolor} || 'black' ;
+  $self->text_color($fgcolor);
+}
+
+sub draw_topline {
+  my ($self) = @_;
+  my $p = $self->{pdf};
+
+  my $width = $self->{paper}{width}-20;
+  my $ypos = $self->{ypos}-3;
+  $p->drawLine(10, $ypos, $width, $ypos);
+}
+
+sub draw_underline {
+  my ($self) = @_;
+  my $p = $self->{pdf};
+
+  my $width = $self->{paper}{width}-20;
+  my $ypos = $self->{ypos}-$self->{font}{size}-3;
+  $p->drawLine(10, $ypos, $width, $ypos);
+}
+
+sub draw_linebox {
+  my ($self, $shade) = @_;
+  my $p = $self->{pdf};
+
+  my $width = $self->{paper}{width}-20;
+  my $ypos = $self->{ypos}-3;
+  my $fontsize = $self->{font}{size}+2;
+  $p->shadeRect(10, $ypos, $width, $ypos-$fontsize, $shade)
+}
+
 sub initLine {
-  my ($self, $rec) = @_;
+  my ($self, $rec, $fld) = @_;
+
   $self->setFont($rec->{font});
+  $self->calcYoffset($fld->{beforespace}) if $fld->{beforespace};
+  $self->set_linecolor($fld->{fgcolor});
+  $self->draw_linebox($fld->{shade}) if $fld->{shade};
+  $self->draw_topline if $rec->{topline};
+  $self->draw_underline if $rec->{underline};
   $self->calcYoffset($self->{font}{size});
 }
 
@@ -392,14 +472,16 @@ sub initField {
 
   $self->setFont($field->{font});
   my $fontsize = $self->{font}{size};
-  $self -> calcYoffset($fontsize) if defined($field->{nl});
 }
 
 sub outField {
-  my ($self, $text, $field) = @_;
-  $self->setFont($field->{font});
+  my ($self, $text, $field, $alt) = @_;
+
+  my $font = $alt->{font} || $field->{font};
+  $self->setFont($font);
   $self->{ypos} = $self->{paper}{topmargen} - mmtoPt($field->{ypos})
     if $field->{ypos};
+  $self -> calcYoffset($self->{font}{size}) if defined($field->{nl}) && $text;
   $self->outText($text, $field->{xpos}, $self->{ypos}, $field->{align});
 }
 
@@ -438,6 +520,12 @@ sub checkPage {
   my ($self) = @_;
   my $bottommargen = $self->{paper}{topmargen} - $self->{paper}{heigth};
   $self->newPage() if $self->{ypos} < $bottommargen;
+}
+
+sub get_doc {
+  my ($self) = @_;
+  my $p = $self->{pdf};
+  $p->Finish("none");
 }
 
 sub printDoc {

@@ -1,4 +1,10 @@
-2005-08-01   Kaare Rasmussen <kar at kakidata dot dk>
+2005-08-07   Kaare Rasmussen <kar at kakidata dot dk>
+
+    Release 0.06
+
+    Added shaded headlines and colored text.
+    Note. The method names are in a mess right now. It'll be sorted out
+    for the 0.10 release.
 
     Release 0.05
 
