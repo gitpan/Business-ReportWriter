@@ -1,4 +1,9 @@
-2005-08-07   Kaare Rasmussen <kar at kakidata dot dk>
+2006-08-07   Kaare Rasmussen <kar at jasonic dot dk>
+
+    Release 0.09
+
+    Refactoring and prettyfying modules and methods.
+    Made Pdf reports mode robust, especially concerning new page.
 
     Release 0.06
 

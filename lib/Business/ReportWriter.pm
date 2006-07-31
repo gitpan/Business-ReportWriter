@@ -1,299 +1,332 @@
 package Business::ReportWriter;
 
+use strict;
 use POSIX qw(setlocale LC_NUMERIC);
-##
-use Data::Dumper;
-##
 
 sub new {
-  my ($class, %parms) = @_;
-  my $self = {};
-  $self = bless $self,$class;
-  return $self;
+    my ( $class, %parms ) = @_;
+
+    my $self = {};
+    $self = bless $self, $class;
+
+    return $self;
 }
 
-sub processReport {
-  my ($self, $outfile, $report, $head, $list) = @_;
-  my %report = %$report;
-  my @list = @$list;
-  push @list, {} if $#list < 1;
+sub process_report {
+    my ( $self, $outfile, $report, $head, $list ) = @_;
 
-  $self->reportInit( $report{report} );
-  $self->pageHeader( $report{page}{header} );
-  $self->body( $report{body} );
-  $self->graphics( $report{graphics} );
-  $self->logos( $report{page}{logo} );
-  $self->breaks( $report{breaks} );
-  $self->fields( $report{fields} );
-  $self->printList(\@list, \%$head );
-  return $outfile ? $self->printDoc($outfile) : $self->get_doc;
+    my %report = %$report;
+    my @list   = @$list;
+    push @list, {} if $#list < 1;
+
+# Setting up the report hash with user's configuration
+    $self->init_report( $report{report} );
+    $self->init_page_header( $report{page}{header} );
+    $self->init_body( $report{body} );
+    $self->init_graphics( $report{graphics} );
+    $self->init_logos( $report{page}{logo} );
+    $self->init_breaks( $report{breaks} );
+    $self->init_fields( $report{fields} );
+    $self->print_list( \@list, \%$head );
+
+    return $outfile ? $self->print_doc($outfile) : $self->get_doc;
 }
 
-sub reportInit {
-  my ($self, $parms) = @_;
-  $self->{report} = $parms;
+sub init_report {
+    my ( $self, $parms ) = @_;
+
+    $self->{report} = $parms;
 }
 
-sub pageHeader {
-  my ($self, $parms) = @_;
-  $self->{report}{page} = $parms;
+sub init_page_header {
+    my ( $self, $parms ) = @_;
+    $self->{report}{page} = $parms;
 }
 
-sub body {
-  my ($self, $parms) = @_;
-  $self->{report}{body} = $parms;
+sub init_body {
+    my ( $self, $parms ) = @_;
+
+    $self->{report}{body} = $parms;
 }
 
-sub graphics {
-  my ($self, $parms) = @_;
-  $self->{report}{graphics} = $parms;
+sub init_graphics {
+    my ( $self, $parms ) = @_;
+
+    $self->{report}{graphics} = $parms;
 }
 
-sub fieldHeaders {
-  my ($self, $fh) = @_;
+sub init_logos {
+    my ( $self, $parms ) = @_;
 
-  if ($fh->{show} ne 'off') {
-    for (@{ $self->{report}{fields} }) {
-      $self->outField($_->{text}, $_, $fh);
+    $self->{report}{logo} = $parms;
+}
+
+sub init_fields {
+    my ( $self, $parms ) = @_;
+
+    $self->{report}{fields} = $parms;
+}
+
+sub init_breaks {
+    my ( $self, $parms ) = @_;
+
+    $self->{report}{breaks} = $parms;
+    my @breakorder;
+    for ( keys %$parms ) {
+        $breakorder[ $parms->{$_}{order} ] = $_;
     }
-  }
+    $self->{report}{breaks}{_order} = [@breakorder];
 }
 
-sub logos {
-  my ($self, $parms) = @_;
-  $self->{report}{logo} = $parms;
-}
-
-sub fields {
-  my ($self, $parms) = @_;
-  $self->{report}{fields} = $parms;
-}
-
-sub breaks {
-  my ($self, $parms) = @_;
-  $self->{report}{breaks} = $parms;
-  my @breakorder;
-  for (keys %$parms) {
-    $breakorder[$parms->{$_}{order}] = $_;
-  }
-  $self->{report}{breaks}{order} = [ @breakorder ];
-}
 # Report writing
-sub initLine {
+sub begin_break {
 }
 
-sub initField {
+sub begin_line {
 }
 
-sub outField {
+sub begin_field {
+}
+
+sub make_field_headers {
+    my ( $self, $fh ) = @_;
+
+    if ( $fh->{show} ne 'off' ) {
+        for ( @{ $self->{report}{fields} } ) {
+            $self->out_field( $_->{text}, $_, $fh );
+        }
+    }
+}
+
+sub out_field {
 }
 
 sub break_fields {
-  my ($self, $break_name, $tot) = @_;
-  my $name = $tot->{name};
-  my $rec = $self->{totals}{$break_name};
+    my ( $self, $break_name, $tot ) = @_;
 
-  $self->process_field($tot, $rec);
-  $self->{totals}{$break_name}{$name} = 0;
+    my $name = $tot->{name};
+    my $rec  = $self->{totals}{$break_name};
+
+    $self->process_field( $tot, $rec );
+    $self->{totals}{$break_name}{$name} = 0;
 }
 
 sub process_break {
-  my ($self, $break_name) = @_;
-  my $p = $self->{pdf};
+    my ( $self, $break_name ) = @_;
 
-  my $break = $self->{report}{breaks}{$break_name};
-  $self -> initLine($break);
+    my $p = $self->{pdf};
 
-  if (defined($break->{total})) {
-    foreach my $tot (@{ $break->{total} }) {
-      $self->break_fields($break_name, $tot);
+    my $break = $self->{report}{breaks}{$break_name};
+    $self->begin_line($break);
+
+    if ( defined( $break->{total} ) ) {
+        foreach my $tot ( @{ $break->{total} } ) {
+            $self->break_fields( $break_name, $tot );
+        }
     }
-  }
 }
 
-sub printBreakheader {
-  my ($self, $rec, $break_name) = @_;
-  my $p = $self->{pdf};
-  my $break = $self->{report}{breaks}{$break_name};
+sub print_break_header {
+    my ( $self, $rec, $break_name ) = @_;
 
-  $self->initLine($rec, $break->{header});
-  for my $bh (@{ $break->{header}{text} }) {
-    $self->process_field($bh, $rec);
-  }
+    my $p     = $self->{pdf};
+    my $break = $self->{report}{breaks}{$break_name};
 
-  $self -> initLine($rec, $break->{header}{FieldHeaders});
-  $self->fieldHeaders($break->{header}{FieldHeaders});
+    $self->begin_break( $rec, $break );
+    $self->begin_line( $rec, $break->{header} );
+    for my $bh ( @{ $break->{header}{text} } ) {
+        $self->process_field( $bh, $rec );
+    }
+
+    $self->begin_line( $rec, $break->{header}{FieldHeaders} );
+    $self->make_field_headers( $break->{header}{FieldHeaders} );
 }
 
-sub printBreak {
-  my $self = shift;
+sub print_break {
+    my $self = shift;
 
-  for my $break_name (@{ $self->{report}{breaks}{order} }) {
-    my $self_break = $self->{breaks}{$break_name} || '';
-    if ($self_break eq '_break') {
-      $self->process_break($break_name);
+    for my $break_name ( @{ $self->{report}{breaks}{_order} } ) {
+        my $self_break = $self->{breaks}{$break_name} || '';
+        if ( $self_break eq '_break' ) {
+            $self->process_break($break_name);
+        }
     }
-  }
 }
 
 sub process_field {
-  my ($self, $fld, $rec) = @_;
+    my ( $self, $fld, $rec ) = @_;
 
-  return if (defined($fld->{depends}) && 
-    !eval($self -> make_text($rec, $fld->{depends})));
-  my $text = defined($fld->{function}) ?
-    $self->make_func($rec, $fld->{function}) :
-    $self->make_text($rec, $fld->{text});
-  $self->outField($text, $fld) if $text;
+    return
+        if ( defined( $fld->{depends} )
+        && !eval( $self->make_text( $rec, $fld->{depends} ) ) );
+    my $text =
+        defined( $fld->{function} )
+        ? $self->make_func( $rec, $fld->{function} )
+        : $self->make_text( $rec, $fld->{text} );
+    $self->out_field( $text, $fld ) if $text;
 }
 
-
 sub make_fieldtext {
-  my ($self, $rec, $text) = @_;
-  my @fields = ($text =~ /(\w*)/g);
-  for my $field (@fields) {
-    $text =~ s/$field/$rec->{$field}/eg;
-  }
-  return $text;
+    my ( $self, $rec, $text ) = @_;
+
+    my @fields = ( $text =~ /(\w*)/g );
+    for my $field (@fields) {
+        $text =~ s/$field/$rec->{$field}/eg;
+    }
+
+    return $text;
 }
 
 sub process_linefield {
-  my ($self, $fld, $rec) = @_;
+    my ( $self, $fld, $rec ) = @_;
 
-  return if (defined($fld->{depends}) && 
-    !eval($self -> make_text($rec, $fld->{depends})));
-  $self -> initField($fld);
-  my $text = defined($fld->{function}) ?
-    $self->make_func($rec, $fld->{function}) :
-    $self->make_fieldtext($rec, $fld->{name});
-  $self->outField($text, $fld) if $text;
+    return
+        if ( defined( $fld->{depends} )
+        && !eval( $self->make_text( $rec, $fld->{depends} ) ) );
+
+    $self->begin_field($fld);
+    my $text =
+        defined( $fld->{function} )
+        ? $self->make_func( $rec, $fld->{function} )
+        : $self->make_fieldtext( $rec, $fld->{name} );
+    $self->out_field( $text, $fld ) if $text;
 }
 
-sub textarray {
-  my ($self, $fld, $rec) = @_;
+sub out_textarray {
+    my ( $self, $fld, $rec ) = @_;
 
-  for (@{ $rec->{$fld->{name}} }) {
-    $self -> initField($fld);
-    $self->outField($_, $fld) if $_;
-  }
-}
-
-sub printLine {
-  my ($self, $rec) = @_;
-
-  $self -> initLine($rec);
-  for (@{ $self->{report}{fields} }) {
-    $self->textarray($_, $rec), next if lc($_->{fieldtype}) eq 'textarray';
-    $self->process_linefield($_, $rec);
-  }
-}
-
-sub sumTotals {
-  my $self = shift;
-  my $rec = shift;
-  for my $break (@{ $self->{report}{breaks}{order} }) {
-    if (defined($self->{report}{breaks}{$break}{total})) {
-      foreach my $tot (@{ $self->{report}{breaks}{$break}{total} }) {
-        my $name = $tot->{name};
-        $self->{totals}{$break}{$name} += $rec->{$name};
-      }
+    for ( @{ $rec->{ $fld->{name} } } ) {
+        $self->begin_field($fld);
+        $self->out_field( $_, $fld ) if $_;
     }
-  }
 }
 
-sub checkforBreak {
-  my ($self, $rec, $last) = @_;
-  my $brk = '';
-  for my $break (reverse @{ $self->{report}{breaks}{order} }) {
-    my $self_break = $self->{breaks}{$break} || '';
-    my $rec_break = $rec->{$break} || '';
-    if (($last && !($break eq '_page')) || $self_break ne $rec_break) {
-      $brk = '_break';
+sub print_line {
+    my ( $self, $rec ) = @_;
+
+    $self->begin_line($rec);
+    for ( @{ $self->{report}{fields} } ) {
+        $self->out_textarray( $_, $rec ), next
+            if lc( $_->{fieldtype} ) eq 'textarray';
+        $self->process_linefield( $_, $rec );
     }
-    $self->{breaks}{$break} = $brk if $brk;
-  }
 }
 
-sub saveBreaks {
-  my $self = shift;
-  my ($rec, $first) = @_;
-  for my $break (reverse @{ $self->{report}{breaks}{order}}) {
-    my $self_break = $self->{breaks}{$break} || '';
-    my $rec_break = $rec->{$break} || '';
-    $self -> printBreakheader($rec, $break)
-      if ($first and $break ne '_total' and $break ne '_page')
-      || $self_break ne $rec_break;
-    $self->{breaks}{$break} = $rec->{$break};
-  }
+sub sum_totals {
+    my ($self, $rec) = @_;
+
+    for my $break ( @{ $self->{report}{breaks}{_order} } ) {
+        if ( defined( $self->{report}{breaks}{$break}{total} ) ) {
+            foreach my $tot ( @{ $self->{report}{breaks}{$break}{total} } ) {
+                my $name = $tot->{name};
+                $self->{totals}{$break}{$name} += $rec->{$name};
+            }
+        }
+    }
 }
 
-sub processTotals {
-  my $self = shift;
-  my $rec = shift;
-  my $first = (!defined($self->{started}));
-  $self->{started} = 1;
-  my $last = (ref $rec ne 'HASH');
-  $self->printTotals($rec) if !$first;
-  $self->saveBreaks($rec, $first) if !$last;
-  $self->sumTotals($rec) if !$last;
+sub check_for_break {
+    my ($self, $rec, $last) = @_;
+
+    my $brk = '';
+    for my $break ( reverse @{ $self->{report}{breaks}{_order} } ) {
+        my $self_break = $self->{breaks}{$break} || '';
+        my $rec_break  = $rec->{$break}          || '';
+        if ( ( $last && !( $break eq '_page' ) )
+            || $self_break ne $rec_break )
+        {
+            $brk = '_break';
+        }
+        $self->{breaks}{$break} = $brk if $brk;
+    }
 }
 
-sub initList {
+sub save_breaks {
+    my $self = shift;
+
+    my ( $rec, $first ) = @_;
+    for my $break ( reverse @{ $self->{report}{breaks}{_order} } ) {
+        my $self_break = $self->{breaks}{$break} || '';
+        my $rec_break  = $rec->{$break}          || '';
+        $self->print_break_header( $rec, $break )
+            if ( $first and $break ne '_total' and $break ne '_page' )
+            || $self_break ne $rec_break;
+        $self->{breaks}{$break} = $rec->{$break};
+    }
 }
 
-sub checkPage {
+sub process_totals {
+    my ($self, $rec) = @_;
+
+    my $first = ( !defined( $self->{started} ) );
+    $self->{started} = 1;
+    my $last = ( ref $rec ne 'HASH' );
+    $self->print_totals($rec) if !$first;
+    $self->save_breaks( $rec, $first ) if !$last;
+    $self->sum_totals($rec) if !$last;
 }
 
-sub printList {
-  my ($self, $list, $page) = @_;
-  my @list = @$list;
-  $self->{pageData} = $page;
-
-  $self->initList;
-
-  foreach my $rec (@list) {
-    $self->checkPage;
-    $self->processTotals($rec);
-    $self->printLine($rec);
-  }
-  $self->endPrint();
+sub begin_list {
 }
 
-sub printTotals {
-  my ($self, $rec) = @_;
-  my $last = (ref $rec ne 'HASH');
-  $self->checkforBreak($rec, $last);
-  $self->printBreak();
+sub check_page {
 }
 
-sub endPrint {
-  my $self = shift;
-  $self -> processTotals();
+sub print_list {
+    my ( $self, $list, $page ) = @_;
+
+    my @list = @$list;
+    $self->{pageData} = $page;
+
+    $self->begin_list;
+
+    foreach my $rec (@list) {
+        $self->check_page;
+        $self->process_totals($rec);
+        $self->print_line($rec);
+    }
+    $self->end_print();
 }
+
+sub print_totals {
+    my ( $self, $rec ) = @_;
+
+    my $last = ( ref $rec ne 'HASH' );
+    $self->check_for_break( $rec, $last );
+    $self->print_break();
+}
+
+sub end_print {
+    my $self = shift;
+
+    $self->process_totals();
+}
+
 # Support
 
 sub make_text {
-  my ($self, $rec, $text) = @_;
+    my ( $self, $rec, $text ) = @_;
 
-  my @fields = ($text =~ /\$(\w*)/g);
-  for my $field (@fields) {
-    $text =~ s/\$$field/$rec->{$field}/eg;
-  }
-  return $text;
+    my @fields = ( $text =~ /\$(\w*)/g );
+    for my $field (@fields) {
+        $text =~ s/\$$field/$rec->{$field}/eg;
+    }
+    return $text;
 }
 
 sub make_func {
-  my ($self, $rec, $func) = @_;
+    my ( $self, $rec, $func ) = @_;
 
-  my @fields = ($func =~ /\$(\w*)/g);
-  for my $field (@fields) {
-    $func =~ s/\$$field/\$rec->{$field}/g;
-  }
-  my $text;
-  setlocale(LC_NUMERIC, $self->{report}{locale});
-  eval('$text = ' . $func);
-  setlocale( LC_NUMERIC, "C" );
-  return $text;
+    my @fields = ( $func =~ /\$(\w*)/g );
+    for my $field (@fields) {
+        $func =~ s/\$$field/\$rec->{$field}/g;
+    }
+
+    my $text;
+    setlocale( LC_NUMERIC, $self->{report}{locale} );
+    eval( '$text = ' . $func );
+    setlocale( LC_NUMERIC, "C" );
+    return $text;
 }
 
 1;
@@ -308,7 +341,7 @@ Business::ReportWriter - A Business Oriented ReportWriter.
   use Business::ReportWriter::Pdf;
 
   my $rw = new Business::ReportWriter::Pdf();
-  $rw -> processReport($outfile, $report, $head, $list);
+  $rw->process_report($outfile, $report, $head, $list);
 
 =head1 DESCRIPTION
 
@@ -325,7 +358,7 @@ The report is written to a file.
 
 Creates a Report Writer Object.
 
-=item $obj -> processReport($outfile, $report, $head, $list)
+=item $obj->process_report($outfile, $report, $head, $list)
 
 Creates a PDF Report and writes it to the file named in $outfile. 
 
@@ -438,6 +471,17 @@ B<pagenr> is automatically included and updated.
 Array of hash. Each array element represents one line in the final report.
 The hash keys can be referenced in the report definition.
 
+=head1 SEE ALSO
+
+ Business::ReportWriter::OOCalc, Business::ReportWriter::Pdf 
+
+=head1 COPYRIGHT
+
+Copyright (C) 2003-2006 Kaare Rasmussen. All rights reserved.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
 =head1 AUTHOR
 
-Kaare Rasmussen <kar at kakidata.dk>
+Kaare Rasmussen <kar at jasonic.dk>

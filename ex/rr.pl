@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/local/bin/perl -w
 
 package rr;
 
@@ -22,6 +22,7 @@ sub processReport {
   endDb($db);
   my $s = new Business::ReportWriter::Pdf();
   my $head;
+#use Data::Dumper;print Dumper \@list;
   $s -> processReport($outfile, $report, $head, \@list);
 
 #  $s -> pageHeader( %{ $report{page}{header} } );

@@ -1,8 +1,8 @@
 --- #YAML:1.0
 name: Business-ReportWriter
-version: 0.06
+version: 0.09
 author:
-  - Kaare Rasmussen <kar at kakidata.dk>
+  - Kaare Rasmussen <kar at jasonic.dk>
 abstract: ! >-
   A Business Oriented ReportWriter. Currently supports PDF and OpenOffice
   Calc.
